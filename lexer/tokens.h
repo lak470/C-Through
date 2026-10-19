@@ -32,6 +32,7 @@ typedef enum{
     TOK_BANG,            // !
  
     // symbols
+    TOK_HASH,
     TOK_COLON,
     TOK_SEMICOLON,
     TOK_QUESTION,
