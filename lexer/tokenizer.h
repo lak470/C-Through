@@ -17,24 +17,25 @@ char peek(const lexer *lex){
     return (lex->code[lex->position]);
 }
 
-int character_match(const lexer *lex , char c){
-    return ((peek(lex) == c) ? 1 : 0);
+int character_match(const lexer *lex , const char *str){
+    char inp = peek(lex);
+    return (inp != '\0'  && strchr(str , inp) != NULL);
 }
 
 char peek_next(const lexer *lex){
-    if(character_match(lex , '\0')){
+    if(character_match(lex , "\0")){
         return '\0';
     }
     return (lex->code[lex->position + 1]);
 }
 
 int is_at_end(const lexer *lex){
-    return character_match(lex , '\0');
+    return (peek(lex) == '\0');
 }
 
 void advance(lexer *lex){
     if(!is_at_end(lex)){
-        if(character_match(lex , '\n')){
+        if(character_match(lex , "\n")){
             lex->line++;
             lex->column = 1;
         }
@@ -98,7 +99,7 @@ lexer *tokenizer(char *source){
     while(!is_at_end(lex)){
 
         //for strings
-        if(character_match(lex , '"')){
+        if(character_match(lex , "\"")){
             size_t string_len = 0;
             int start_line = lex->line;
             int start_col = lex->column;
@@ -112,7 +113,7 @@ lexer *tokenizer(char *source){
                     disp_error(lex->code , start_line , start_col , start_pos , 3 , "String starts here but is never closed ,(did you forget a closing quote?)");
                 }
                 //for escape sequences
-                else if(character_match(lex , '\\')){
+                else if(character_match(lex , "\\")){
                     advance(lex);
                     if(is_at_end(lex)){
                         disp_error(lex->code , lex->line , lex->column - 1 , lex->position - 1 , 3, "file ends right after a backslash, the file may be cut off");
@@ -195,7 +196,7 @@ lexer *tokenizer(char *source){
                             }
                             while(is_hexadecimal_digit(peek(lex)) && i < 2){
                                 if(leading_0){
-                                    if(character_match(lex , '0')){
+                                    if(character_match(lex , "0")){
                                         if(is_hexadecimal_digit(peek_next(lex))){
                                             advance(lex);
                                         }
@@ -233,7 +234,7 @@ lexer *tokenizer(char *source){
                     advance(lex);
                 }
                 //string end
-                else if(character_match(lex , '"')){
+                else if(character_match(lex , "\"")){
                     Token string_token = make_token_arena_allocated_tokens(TOK_STRING , start_line , start_col , &lex->Token_data , string_len);
                     if(string_len){
                         memcpy(string_token.content , string_data.data , string_len);
@@ -245,7 +246,7 @@ lexer *tokenizer(char *source){
                     break;
                 }
                 // line changed mid string
-                else if(character_match(lex , '\n')){
+                else if(character_match(lex , "\n")){
                     disp_error(lex->code , start_line , start_col , start_pos , 3 , "a string can't span lines, if this one was meant to continue, close it with \" or use \\n for a line break");
                 }
                 //normal chars
@@ -256,7 +257,305 @@ lexer *tokenizer(char *source){
                     advance(lex);
                 }
             }
+            continue;
         }
 
+        // for whitespaces
+        if(character_match(lex , " \t\r\n\f\v")){
+            advance(lex);
+            continue;
+        }
+
+        // for single instance character 
+        if(character_match(lex , "(){}[];,~?:#")){
+            Token temp;
+            switch (peek(lex)){
+            case '(':
+                temp = make_token_pre_defined_tokens(TOK_OPEN_ROUND , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case ')':
+                temp = make_token_pre_defined_tokens(TOK_CLOSE_ROUND , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case '{':
+                temp = make_token_pre_defined_tokens(TOK_OPEN_CURLY , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case '}':
+                temp = make_token_pre_defined_tokens(TOK_CLOSE_CURLY , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case '[':
+                temp = make_token_pre_defined_tokens(TOK_OPEN_SQUARE , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case ']':
+                temp = make_token_pre_defined_tokens(TOK_CLOSE_SQUARE , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case ';':
+                temp = make_token_pre_defined_tokens(TOK_SEMICOLON , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case ',':
+                temp = make_token_pre_defined_tokens(TOK_COMMA , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case '~':
+                temp = make_token_pre_defined_tokens(TOK_TILDE , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case '?':
+                temp = make_token_pre_defined_tokens(TOK_QUESTION , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case ':':
+                temp = make_token_pre_defined_tokens(TOK_COLON, lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            case '#':
+                temp = make_token_pre_defined_tokens(TOK_HASH , lex);
+                push_vector(&lex->Tokens , &temp);
+                break;
+            default:
+                break;
+            }
+            advance(lex);
+            continue;
+        }
+
+        //for single line comments
+        if(character_match(lex , "/") && peek_next(lex) == '/'){
+            while(peek(lex) != '\n' && !is_at_end(lex)){
+                advance(lex);
+            }
+            continue;
+        }
+
+        //for multi line comments
+        if(character_match(lex , "/")  && peek_next(lex) == '*'){
+            int start_line = lex->line;
+            int start_col = lex->column; 
+            int start_pos = lex->position;
+            advance(lex);
+            advance(lex);
+            while((peek(lex) != '*' || peek_next(lex) != '/') && !is_at_end(lex)){
+                advance(lex);
+            }
+            if(is_at_end(lex)){
+                disp_error(lex->code ,start_line , start_col , start_pos , 3 , "Multi line comment started but never close (did you forget a missing \"*\\\"?)" );
+            }
+            advance(lex);
+            advance(lex);
+            continue;
+        }
+
+        // for characters which are present in multiple tokens
+        if(character_match(lex , "+-*/%=!<>&|^.")){
+            Token temp;
+            switch(peek(lex)){
+                case '+':
+                    if(peek_next(lex) == '+'){
+                        temp = make_token_pre_defined_tokens(TOK_PLUS_PLUS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_PLUS_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_PLUS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '-':
+                    if(peek_next(lex) == '-'){
+                        temp = make_token_pre_defined_tokens(TOK_MINUS_MINUS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_MINUS_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else if(peek_next(lex) == '>'){
+                        temp = make_token_pre_defined_tokens(TOK_ARROW , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_MINUS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '*':
+                    if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_STAR_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_STAR , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '/':
+                    if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_SLASH_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_SLASH , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '%':
+                    if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_PERCENT_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_PERCENT , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '=':
+                    if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_ASSIGN , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '!':
+                    if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_NOT_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_NOT , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '<':
+                    if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_LESS_EQUAL , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else if(peek_next(lex) == '<'){
+                        if(lex->code[lex->position + 2] == '='){
+                            temp = make_token_pre_defined_tokens(TOK_LSHIFT_EQUALS , lex);
+                            push_vector(&lex->Tokens , &temp);
+                            advance(lex);
+                            advance(lex);
+                        }
+                        else{
+                            temp = make_token_pre_defined_tokens(TOK_LEFT_SHIFT , lex);
+                            push_vector(&lex->Tokens , &temp);
+                            advance(lex);
+                        }
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_LESS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '>':
+                    if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_GREATER_EQUAL , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else if(peek_next(lex) == '>'){
+                        if(lex->code[lex->position + 2] == '='){
+                            temp = make_token_pre_defined_tokens(TOK_RSHIFT_EQUALS , lex);
+                            push_vector(&lex->Tokens , &temp);
+                            advance(lex);
+                            advance(lex);
+                        }
+                        else{
+                            temp = make_token_pre_defined_tokens(TOK_RIGHT_SHIFT , lex);
+                            push_vector(&lex->Tokens , &temp);
+                            advance(lex);
+                        }
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_GREATER , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '&':
+                    if(peek_next(lex) == '&'){
+                        temp = make_token_pre_defined_tokens(TOK_AND_AND , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_AND_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_AMPERSAND , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '|':
+                    if(peek_next(lex) == '|'){
+                        temp = make_token_pre_defined_tokens(TOK_OR_OR , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_OR_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_PIPE , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '^':
+                    if(peek_next(lex) == '='){
+                        temp = make_token_pre_defined_tokens(TOK_XOR_EQUALS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_CARET , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                case '.':
+                    if(peek_next(lex) == '.'  && lex->code[lex->position + 2] == '.'){
+                        temp = make_token_pre_defined_tokens(TOK_ELLIPSIS , lex);
+                        push_vector(&lex->Tokens , &temp);
+                        advance(lex);
+                        advance(lex);
+                    }
+                    else{
+                        temp = make_token_pre_defined_tokens(TOK_DOT , lex);
+                        push_vector(&lex->Tokens , &temp);
+                    }
+                    break;
+                default:
+                    break;
+            }
+            advance(lex);
+            continue;
+        }
+        
     }
 }

@@ -29,7 +29,7 @@ typedef enum{
     // logical
     TOK_AND_AND,         // &&
     TOK_OR_OR,           // ||
-    TOK_BANG,            // !
+    TOK_NOT,            // !
  
     // symbols
     TOK_HASH,
