@@ -27,7 +27,7 @@ void push_vector(Vector *v, const void *element){
         }
         void *temp = realloc(v->data , next_size);
         if(temp == NULL){
-            fprintf(stderr, "Memory allocation failure for vector\n");
+            fprintf(stderr, "Internal Error: Memory allocation failure for vector\n");
             exit(2);
         }
         v->data = temp; 
@@ -43,8 +43,8 @@ void push_vector(Vector *v, const void *element){
 
 void *get_element(const Vector *v , size_t n){
     if(n >= v->len){
-        fprintf(stderr, "Vector index out of range\n");
-        exit(3);
+        fprintf(stderr, "Internal Error: Vector index (%zu) out of range(length %d)\n" , n , v->len);
+        exit(2);
     }
     return ((char*)v->data + (n * v->element_size));
 }

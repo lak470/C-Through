@@ -1,7 +1,8 @@
 #pragma once
 #include "tokens_struct.h"
-#include "../arena_allocator.h"
-#include "../Vector.h"
+#include "../utils/arena_allocator.h"
+#include "../utils/vector.h"
+#include "../utils/errors.h"
 
 typedef struct{
     char *code;
@@ -85,7 +86,7 @@ int hexadecimal_digit_val(char c){
 }
 
 lexer *tokenizer(char *source){
-    lexer *lex;
+    lexer *lex = (lexer *)malloc(sizeof(lexer));
     lex->code = source;
     lex->position = 0;
     lex->line = 1;
@@ -101,21 +102,20 @@ lexer *tokenizer(char *source){
             size_t string_len = 0;
             int start_line = lex->line;
             int start_col = lex->column;
+            int start_pos = lex->position;
             advance(lex);
             Vector string_data;
             initialize_vector(&string_data , 1);
             while(1){
                 //if it ended
                 if(is_at_end(lex)){
-                    fprintf(stderr , "String Initialized but not Terminated\n");
-                    exit(4);
+                    disp_error(lex->code , start_line , start_col , start_pos , 3 , "String starts here but is never closed ,(did you forget a closing quote?)");
                 }
                 //for escape sequences
                 else if(character_match(lex , '\\')){
                     advance(lex);
                     if(is_at_end(lex)){
-                        fprintf(stderr , "String Initialized but not Terminated\n");
-                        exit(4);
+                        disp_error(lex->code , lex->line , lex->column - 1 , lex->position - 1 , 3, "file ends right after a backslash, the file may be cut off");
                     }
                     unsigned char c;
                     switch (peek(lex)){
@@ -179,8 +179,7 @@ lexer *tokenizer(char *source){
                                 c = sum;
                             }
                             else{
-                                fprintf(stderr , "Byte %d isnt assigned to any character" , sum);
-                                exit(5);
+                                disp_error(lex->code , start_line , lex->column - i - 1 , lex->position ,3 ,  "Octal escape value = %d , is out of range, (a char can hold 0 to 255, so the max is \\377)" , sum);
                             }
                             break;
                         }
@@ -192,8 +191,7 @@ lexer *tokenizer(char *source){
                             advance(lex);
                             int leading_0 = 1;
                             if(!is_hexadecimal_digit(peek(lex))){
-                                fprintf(stderr , "Hexadecimal number initialized , but is empty");
-                                exit(7);
+                                disp_error(lex->code , start_line , lex->column - 1 , lex->position , 3 , "\\x must be followed by at least one hex digit (0-9, a-f) , %c is not a valid hexadecimal digit" , peek(lex));
                             }
                             while(is_hexadecimal_digit(peek(lex)) && i < 2){
                                 if(leading_0){
@@ -227,8 +225,7 @@ lexer *tokenizer(char *source){
                             break;
                         }
                         default:
-                            fprintf(stderr , "Invalid character after backslash\n");
-                            exit(1);
+                            disp_error(lex->code , start_line , lex->column - 1 , lex->position , 3 , "unknown escape sequence \\%c" , peek(lex));
                             break;
                     }
                     push_vector(&string_data , &c);
@@ -249,8 +246,7 @@ lexer *tokenizer(char *source){
                 }
                 // line changed mid string
                 else if(character_match(lex , '\n')){
-                    fprintf(stderr , "String initiated but not Terminated\n");
-                    exit(5);
+                    disp_error(lex->code , start_line , start_col , start_pos , 3 , "a string can't span lines, if this one was meant to continue, close it with \" or use \\n for a line break");
                 }
                 //normal chars
                 else{

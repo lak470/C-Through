@@ -20,12 +20,12 @@ typedef struct{
 Block *block_initialize(size_t size, size_t used, Block *next){
     Block *b = (Block *)malloc(sizeof(Block));
     if(b == NULL){
-        fprintf(stderr, "Memory allocation Failure\n");
+        fprintf(stderr, "Internal error: Memory allocation Failure\n");
         exit(1);
     }
     b->data = (char *)malloc(size);
     if(b->data == NULL){
-        fprintf(stderr, "Memory allocation Failure\n");
+        fprintf(stderr, "Internal error: Memory allocation Failure\n");
         exit(1);
     }
     b->cap = size;
